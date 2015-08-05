@@ -28,8 +28,9 @@
 
 (ns aerial.utils.math.infoth
 
-  "Various frequency, combinatorial, probability, statistical,
-   measure, and metrics for a variety of sequence and string data."
+  "Various Information Theory functions and measures rooted in Shannon
+   Entropy measure and targetting a variety of sequence and string
+   data."
 
   (:require [clojure.math.numeric-tower :as math]
             [clojure.string :as str]
