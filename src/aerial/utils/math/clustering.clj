@@ -27,7 +27,7 @@
 ;;--------------------------------------------------------------------------;;
 ;;
 
-(ns edu.bc.utils.clustering
+(ns aerial.utils.math.clustering
 
   "Various data clustering algorithms, techniques, functions.
    Generally applicable, but typically used for sequence clustering of
