@@ -87,6 +87,23 @@
              (first rsq)
              (conj res (first rsq))))))
 
+(defn separate
+  "Returns a vector:
+   [(filter f s), (filter (complement f) s) ]"
+  [f s]
+  [(filter f s) (filter (complement f) s)])
+
+(defn rotations
+  "Returns a lazy seq of all rotations of a seq"
+  [x]
+  (if (seq x)
+    (map
+     (fn [n _]
+       (lazy-cat (drop n x) (take n x)))
+     (iterate inc 0) x)
+    (list nil)))
+
+
 (defn takev
   "Eager take. Uses transducers to eagerly take from a coll"
   [n coll]
@@ -101,7 +118,43 @@
   [n coll]
   (reduce ((drop n) conj) [] coll))
 
-(defn vsplit-at
+(defn takev-while
+  "Eager take-while. Uses transducers to eagerly take from a coll
+
+   WARNING: Use with caution on large colls. May infinite loop on
+   infinite colls!
+  "
+  [pred coll]
+  (reduce ((take-while pred) conj) [] coll))
+
+(defn dropv-while
+  "Eager drop-while. Uses transducers to eagerly drop from a coll
+
+   WARNING: Use with caution on large colls. May infinite loop on
+   infinite colls!
+  "
+  [pred coll]
+  (reduce ((drop-while pred) conj) [] coll))
+
+(defn takev-until
+  "Eager take-until. Uses transducers to eagerly take from a coll
+
+   WARNING: Use with caution on large colls. May infinite loop on
+   infinite colls!
+  "
+  [pred coll]
+  (takev-while (complement pred) coll))
+
+(defn dropv-until
+  "Eager drop-until. Uses transducers to eagerly drop from a coll
+
+   WARNING: Use with caution on large colls. May infinite loop on
+   infinite colls!
+  "
+  [pred coll]
+  (dropv-while (complement pred) coll))
+
+(defn splitv-at
   "Eager split. Uses transducers to eagerly split a coll a pos n.
 
    WARNING: Uses eager drop - use with caution on large colls. Will
@@ -110,6 +163,15 @@
   [n coll]
   [(transduce (take n) conj [] coll)
    (transduce (drop n) conj [] coll)])
+
+(defn separatev
+  "Eager separate, returns [(filterv f s) (filter (complement f) s)]
+
+   WARNING: Uses eager drop - use with caution on large colls. Will
+   infinite loop on infinite colls!
+  "
+  [f s]
+  [(filterv f s) (filter (complement f) s)])
 
 
 (defn mkseq [x]

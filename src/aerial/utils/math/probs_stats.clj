@@ -57,7 +57,7 @@
   (set (map #(apply str %) (partition n 1 s))))
 
 (defn word-letter-pairs [n s]
-  (reduce (fn[m s] (set/union m (letter-pairs n s))) #{} (str/split #" " s)))
+  (reduce (fn[m s] (set/union m (letter-pairs n s))) #{} (str/split s #" ")))
 
 (defn keysort [map]
   (sort #(string-less? (key %1) (key %2)) map))

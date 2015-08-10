@@ -34,8 +34,8 @@
 
   (:require
    [clojure.java.io :as cjio :refer [reader writer]]
-   [clojure.string :as str :refer [split]]
    [aerial.fs :as fs]
+   [aerial.utils.string :as str]
    [aerial.utils.misc :refer [self-process-id runx]]
    ))
 
@@ -54,8 +54,8 @@
                 (let [r (second x)
                       prefix (if (symbol? r)
                                (name r)
-                               (-> r (str/split #"(/|\\)")
-                                   last (str/replace #"\." "")))
+                               (->> r (str/split #"(/|\\)")
+                                    last (str/replace #"\." "")))
                       rs (gensym prefix)]
                   [(conj P [rs `(if (instance? java.io.Reader ~r)
                                   ~r

@@ -32,8 +32,7 @@
    are fairly general and intended to be usable on most any part of
    most any project"
 
-  (:require [clojure.string :as str]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.pprint :refer [cl-format]]
 
             [slingshot.slingshot :refer [throw+ try+ get-throw-context]]
@@ -43,6 +42,7 @@
             [me.raynes.conch.low-level :as shl]
 
             [aerial.fs :as fs]
+            [aerial.utils.string :as str]
             [aerial.utils.coll :refer [positions]])
 
   (:import [java.util Date Calendar Locale]

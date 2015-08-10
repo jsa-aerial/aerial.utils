@@ -163,6 +163,15 @@
   (str/replace-first s match replacement))
 
 
+(defn split
+  "Splits string on a regular expression.  Optional argument limit is
+  the maximum number of splits. Not lazy. Returns vector of the splits."
+  ([^Pattern re ^CharSequence s]
+     (str/split s re))
+  ([^Pattern re limit ^CharSequence s]
+     (str/split s re limit)))
+
+
 (defn ^String map
   "Apply f to each element of coll, concatenate all results into a
   String."
