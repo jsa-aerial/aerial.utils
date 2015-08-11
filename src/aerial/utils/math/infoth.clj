@@ -37,9 +37,9 @@
             [clojure.set :as set]
 
             [aerial.utils.misc
-             :refer [raise]]
+             :refer [raise catch-all]]
             [aerial.utils.coll
-             :refer [reducem subsets]]
+             :refer [reducem subsets vfold]]
             [aerial.utils.string
              :refer [codepoints]]
             [aerial.utils.math
@@ -781,4 +781,157 @@
     (doseq [i ngram-points]
       (aset v i 1))
     v))
+
+
+
+;;;-------------------------------------------------------------------------;;;
+;;;                                                                         ;;;
+;;;      Minimization and Maximization of Entropy Principles                ;;;
+;;;                                                                         ;;;
+;;; Cumulative Relative Entropy, Centroid Frequency and Probability         ;;;
+;;; dictionaries, information capacity, et.al.                              ;;;
+;;;                                                                         ;;;
+;;;-------------------------------------------------------------------------;;;
+
+
+(defn expected-qdict [q-1 q-2 & {:keys [alpha] :or {alpha ["A" "U" "G" "C"]}}]
+  (reduce (fn[m lmer]
+            (let [l (dec (count lmer))
+                  x (subs lmer 1)
+                  y (subs lmer 0 l)
+                  z (subs lmer 1 l)]
+              (if (and (q-1 x) (q-1 y) (q-2 z))
+                (assoc m lmer (/ (* (q-1 x) (q-1 y)) (q-2 z)))
+                m)))
+          {} (for [x (keys q-1) a alpha] (str x a))))
+
+
+(defn freq-xdict-dict
+  [q sq]
+  (let [ext-sq (str sq "X")
+        residue-key (subs ext-sq (- (count sq) (- q 1)))
+        q-xfreq-dict (freqn q ext-sq)
+        q-freq-dict (dissoc q-xfreq-dict residue-key)]
+    [q-xfreq-dict q-freq-dict]))
+
+(defn q-1-dict
+  ([q-xdict]
+     (reduce (fn[m [k v]]
+               (let [l (count k)
+                     pre (subs k 0 (dec l))]
+                 (assoc m pre (+ (get m pre 0) v))))
+             {} q-xdict))
+  ([q sq]
+     (probs (dec q) sq)))
+
+(defn q1-xdict-dict
+  [q sq & {:keys [ffn] :or {ffn probs}}]
+  (let [[q-xfreq-dict q-freq-dict] (freq-xdict-dict q sq)
+        q-xpdf-dict (probs q-xfreq-dict)
+        q-pdf-dict (probs q-freq-dict)]
+    {:xfreq q-xfreq-dict :xpdf q-xpdf-dict
+     :freq q-freq-dict :pdf q-pdf-dict}))
+
+
+
+(defn reconstruct-dict
+  [l sq & {:keys [alpha] :or {alpha ["A" "U" "G" "C"]}}]
+  {:pre [(> l 2)]}
+  (let [q (dec l)
+        qmaps (q1-xdict-dict q sq)
+        [q-xdict q-dict] (map qmaps [:xpdf :pdf])
+        q-1dict (q-1-dict q-xdict)]
+    (expected-qdict q-dict q-1dict :alpha alpha)))
+
+
+(defn max-qdict-entropy
+  [q & {:keys [alpha] :or {alpha ["A" "U" "G" "C"]}}]
+  (let [base (count alpha)]
+    (* q (log2 base))))
+
+(defn informativity
+  ([q sq]
+     (- (max-qdict-entropy q) (entropy (probs q sq))))
+  ([q-dict]
+     (let [q (count (first (keys q-dict)))]
+       (- (max-qdict-entropy q) (entropy q-dict)))))
+
+
+(defn limit-entropy
+  [q|q-dict sq|q-1dict &
+   {:keys [alpha NA] :or {alpha ["A" "U" "G" "C"] NA -1.0}}]
+  {:pre [(or (and (integer? q|q-dict)
+                  (or (string? sq|q-1dict) (coll? sq|q-1dict)))
+             (and (map? q|q-dict) (map? sq|q-1dict)))]}
+
+  (if (map? q|q-dict)
+    (let [q-dict q|q-dict
+          q-1dict sq|q-1dict]
+      (/ (- (entropy q-dict) (entropy q-1dict))
+         (log2 (count alpha))))
+
+    (let [q q|q-dict
+          sq sq|q-1dict
+          lgcnt (log2 (count alpha))]
+      (if (= q 1)
+        (/ (entropy (probs 1 sq)) lgcnt)
+
+        (let [qmaps (q1-xdict-dict q sq)
+              [q-xdict q-dict] (map qmaps [:xpdf :pdf])
+              q-1dict (q-1-dict q-xdict)]
+          (if (< (count q-dict) (count q-1dict))
+            (if (fn? NA) (NA q-dict q-1dict) NA)
+            (/ (- (entropy q-dict) (entropy q-1dict)) lgcnt)))))))
+
+
+(defn limit-informativity
+  ([q sq]
+     )
+  ([q-dict]
+     ))
+
+
+(defn CREl
+  [l sq & {:keys [limit alpha]
+           :or {limit 15}}]
+  {:pre [(> l 2) alpha]}
+  (sum (fn[k]
+         (catch-all (DX||Y
+                     (probs k sq)
+                     (reconstruct-dict k sq :alpha alpha))))
+       (range l (inc limit))))
+
+
+(defn information-capacity
+  [q sq & {:keys [cmpfn] :or {cmpfn jensen-shannon}}]
+  (catch-all (cmpfn (probs q sq)
+                    (reconstruct-dict q sq))))
+
+
+(defn hybrid-dictionary
+  "Compute the 'hybrid', aka centroid, dictionary or Feature Frequency
+   Profile (FFP) for sqs.  SQS is either a collection of already
+   computed FFPs (probability maps) of sequences, or a collection of
+   sequences, or a string denoting a sequence file (sto, fasta, aln,
+   ...) giving a collection of sequences.  In the latter cases, the
+   sequences will have their FFPs computed based on word/feature
+   length L (resolution size).  In all cases the FFPs are combined,
+   using the minimum entropy principle, into a joint ('hybrid' /
+   centroid) FFP.
+  "
+  [l sqs]
+  {:pre [(or (string? sqs) (coll? sqs))]}
+
+  (let [sqs (if (-> sqs first map?)
+              sqs
+              (if (coll? sqs) sqs (raise :type :old-read-seqs :sqs sqs)))
+        cnt (count sqs)
+        par (max (math/floor (/ cnt 10)) 2)
+        dicts (if (-> sqs first map?) sqs (vfold #(probs l %) sqs))
+        hybrid (apply merge-with +
+                      (vfold (fn[subset] (apply merge-with + subset))
+                             (partition-all (/ (count dicts) par) dicts)))]
+    (reduce (fn[m [k v]] (assoc m k (double (/ v cnt))))
+            {} hybrid)))
+
 
