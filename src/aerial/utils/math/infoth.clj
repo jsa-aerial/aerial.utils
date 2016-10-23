@@ -40,7 +40,7 @@
              :refer [raise catch-all]]
             [aerial.utils.coll
              :refer [reducem subsets vfold]]
-            [aerial.utils.string
+            [aerial.utils.string :as austr
              :refer [codepoints]]
             [aerial.utils.math
              :refer [sum log2]]
@@ -677,6 +677,26 @@
           (fn [prev-row s-elem] (new-row prev-row s-elem t))
           (range (inc (count t)))
           s))))
+
+
+(defn- hamming-stgs [s1 s2]
+  (let [sz1 (long (count s1))
+        len (long (min sz1 (long (count s2))))]
+    (loop [i (long 0)
+           cnt (long (Math/abs (- len sz1)))]
+      (if (= i sz1)
+        cnt
+        (if (= (austr/get s1 i) (austr/get s2 i))
+          (recur (inc i) cnt)
+          (recur (inc i) (inc cnt)))))))
+
+(defn hamming
+  "Compute hamming distance between sequences S1 and S2. If both s1
+  and s2 are strings, performs an optimized version"
+  [s1 s2]
+  (if (and (string? s1) (string? s2))
+    (hamming-stgs s1 s2)
+    (reduce + (map (fn [b1 b2] (if (= b1 b2) 0 1)) s1  s2))))
 
 
 (defn diff-fn

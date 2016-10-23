@@ -32,6 +32,8 @@
    dstandard Clojure ecosystem.  Mostly for seqs, but also for
    vectors, maps and sets."
 
+  (:refer-clojure :exclude [map-entry?])
+
   (:require
    [clojure.core.reducers :as r]
    [clojure.string :as str]
@@ -87,11 +89,31 @@
              (first rsq)
              (conj res (first rsq))))))
 
+(defn sliding-take
+  "Sliding window take. N is the \"window\" size to slide across
+  collection COLL treated as a sequence. D is the slide displacement
+  and defaults to 1."
+  ([n coll]
+   (sliding-take 1 n coll))
+  ([d n coll]
+   (let [next (fn next [s]
+                (when (seq s)
+                  (cons (take n s)
+                        (lazy-seq (next (drop d s))))))]
+     (next coll))))
+
 (defn separate
   "Returns a vector:
    [(filter f s), (filter (complement f) s) ]"
   [f s]
   [(filter f s) (filter (complement f) s)])
+
+(defn rotate
+  "Rotate (seq coll) by n positions. In single arg case, n=1."
+  ([coll]
+   (rotate 1 coll))
+  ([n coll]
+   (concat (drop n coll) (take n coll))))
 
 (defn rotations
   "Returns a lazy seq of all rotations of a seq"
@@ -103,6 +125,13 @@
      (iterate inc 0) x)
     (list nil)))
 
+
+(defn concatv
+  "Eager concat. WARNING: Use with caution on large colls. Will
+  infinite loop on infinite colls!"
+  ([] [])
+  ([coll & colls]
+   (reduce (fn[C c] (reduce conj C c)) [] (cons coll colls))))
 
 (defn takev
   "Eager take. Uses transducers to eagerly take from a coll"
@@ -165,13 +194,24 @@
    (transduce (drop n) conj [] coll)])
 
 (defn separatev
-  "Eager separate, returns [(filterv f s) (filter (complement f) s)]
+  "Eager separate, returns [(filterv f s) (filterv (complement f) s)]
 
    WARNING: Uses eager drop - use with caution on large colls. Will
    infinite loop on infinite colls!
   "
   [f s]
-  [(filterv f s) (filter (complement f) s)])
+  [(filterv f s) (filterv (complement f) s)])
+
+(defn partitionv-all
+  "Eager partition-all. Uses transducers to eagerly partition coll
+   into partitions of size n (with possibly fewer than n items at the
+   end).
+
+   WARNING: use with caution on large colls. Will infinite loop on
+   infinite colls!
+  "
+  [n coll]
+  (transduce (partition-all n) conj [] coll))
 
 
 (defn mkseq [x]
@@ -213,9 +253,12 @@
          (recur (conj ss (rand-nth s))))))))
 
 
-;;; Extra predicates...
-(defn map-entry? [x]
-  (instance? clojure.lang.MapEntry x))
+(defn map-entry?
+  "Return whether x is a map entry"
+  [x]
+  (if (resolve (symbol "clojure.core/map-entry?"))
+    (clojure.core/map-entry? x)
+    (instance? clojure.lang.MapEntry x)))
 
 (defn merge-with*
   "Merge-with needs to call user supplied F with the KEY as well!!!
@@ -233,6 +276,32 @@
           merge2 (fn [m1 m2]
                    (reduce merge-entry (or m1 {}) (seq m2)))]
       (reduce merge2 maps))))
+
+(defn map->csv-map
+  "Transforms a nested map into a \"flattened\" map where keys are
+  column names formed by concatenating the path of keys to each
+  element. If prefix is given it is catenated to the front of each
+  column name.
+
+  Ex:
+
+  (map->csv-map {:one {:a 1 :b 2}, :two {\"hi\" 1 \"there\" 7}})
+  => {\"one_a\" [1], \"one_b\" [2], \"two_hi\" [1], \"two_there\" [7]}
+
+  (map->csv-map \"P\" {:one {:a 1 :b 2}, :two {\"hi\" 1 \"there\" 7}})
+  => {\"P_one_a\" [1], \"P_one_b\" [2], \"P_two_hi\" [1], \"P_two_there\" [7]}
+  "
+  ([map] (map->csv-map "" map))
+  ([prefix map]
+   (reduce-kv (fn [m k v]
+                (let [prefixed (if (empty? prefix)
+                                 (name k)
+                                 (str prefix "_" (name k)))]
+                  (merge m (if (map? v)
+                             (map->csv-map prefixed v)
+                             {prefixed [v]}))))
+              {}
+              map)))
 
 (defn coalesce-xy-yx
   "Coaleseces elements of item-coll, which are or have common \"keys\",
@@ -350,6 +419,50 @@
                    (fn([] r) ([x y] (fr x y)))
                    (rest colls)))
           (fr) (first colls))))))
+
+
+
+(defn xprod
+  "Cross product item generation of size K over COLL. xfn is a
+  transform function applied to each item set generated, and defaults
+  to simply aggregating them in a vector.
+
+  Examples:
+  (xprod 2 \"ADN\")
+  => [[\\A \\A] [\\A \\D] [\\A \\N] [\\D \\A] [\\D \\D]
+      [\\D \\N] [\\N \\A] [\\N \\D] [\\N \\N]]
+  (xprod str 2  \"ADN\")
+  => [\"AA\" \"AD\" \"AN\" \"DA\" \"DD\" \"DN\" \"NA\" \"ND\" \"NN\"]"
+  ([k coll]
+   (xprod vector k coll))
+  ([xfn k coll]
+   (let [v (vec coll)]
+     (apply reducem xfn (fn ([] []) ([R x] (conj R x))) (repeat k coll)))))
+
+(defn xprod-rng1k
+  "Cross product item generation ranging from size 1 to K over
+  COLL. The cross products for each size are concatenated in order.
+  xfn is a transform function applied to each item set generated, and
+  defaults to simply aggregating them in a vector.
+
+  Examples:
+  (xprod-rng1k 1 \"ADN\")
+  => ([\\A] [\\D] [\\N])
+  (xprod-rng1k 2 \"ADN\")
+  => ([\\A] [\\D] [\\N] [\\A \\A] [\\A \\D] [\\A \\N] [\\D \\A] [\\D \\D]
+      [\\D \\N] [\\N \\A] [\\N \\D] [\\N \\N])
+  (xprod-rng1k str 3 \"ADN\")
+  => (\"A\" \"D\" \"N\" \"AA\" \"AD\" \"AN\" \"DA\" \"DD\"
+      \"DN\" \"NA\" \"ND\" \"NN\" \"AAA\" \"AAD\" \"AAN\"
+      \"ADA\" \"ADD\" \"ADN\" \"ANA\" \"AND\" \"ANN\" \"DAA\"
+      \"DAD\" \"DAN\" \"DDA\" \"DDD\" \"DDN\" \"DNA\" \"DND\"
+      \"DNN\" \"NAA\" \"NAD\" \"NAN\" \"NDA\" \"NDD\" \"NDN\"
+      \"NNA\" \"NND\" \"NNN\")"
+  ([k coll]
+   (xprod-rng1k vector k coll))
+  ([xfn k coll]
+   (mapcat #(xprod xfn % coll) (range 1 (inc k)))))
+
 
 
 (defn vfold

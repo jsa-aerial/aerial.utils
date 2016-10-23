@@ -21,7 +21,7 @@
 ;; OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION    ;;
 ;; WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.          ;;
 ;;                                                                          ;;
-;; Author: Jon Anthony & Shermin Pei                                        ;;
+;; Author: Jon Anthony                                                      ;;
 ;;                                                                          ;;
 ;;--------------------------------------------------------------------------;;
 ;;
@@ -33,41 +33,70 @@
    extension of that library."
 
   (:require
-   [clojure.math.numeric-tower :as math]
-   [clojure.math.combinatorics :as comb]))
+   [clojure.math.numeric-tower :as math]))
 
 
-;;; "Had to" bring this in from COMB name space as it was private, but
-;;; needed to apply it here for index return version of combins
-(defn index-combinations
-  "Generates all n-tuples, as indices, over set cardinality cnt"
-  [n cnt]
-  (lazy-seq
-   (let [c (vec (cons nil (for [j (range 1 (inc n))] (+ j cnt (- (inc n)))))),
-         iter-comb
-         (fn iter-comb [c j]
-           (if (> j n) nil
-               (let [c (assoc c j (dec (c j)))]
-                 (if (< (c j) j) [c (inc j)]
-                     (loop [c c, j j]
-                       (if (= j 1) [c j]
-                           (recur (assoc c (dec j) (dec (c j))) (dec j)))))))),
-         step
-         (fn step [c j]
-           (cons (rseq (subvec c 1 (inc n)))
-                 (lazy-seq (let [next-step (iter-comb c j)]
-                             (when next-step
-                               (step (next-step 0) (next-step 1)))))))]
-     (step c 1))))
+(set! *unchecked-math* :warn-on-boxed)
+(defn next-index-combo
+  "Generate, the next index combination of N things taken K at a time,
+  from index combination COMBO. Uses persistent data
+  structures (vectors). Works by spinning the larger indices faster."
+  [combo, ^long n, ^long k]
+  (let [n-k (long (- n k))
+        k-1 (long (dec k))
+        i (long (loop [i (long k-1)]
+                  (let [Ci (long (combo i))]
+                    (if (or (= i 0) (< Ci (+ n-k i))) i (recur (dec i))))))
+        Ci (long (combo i))]
+    (cond
+      (and (= i 0) (>= Ci n-k)) nil ; done
+      (or (= i k-1)                 ; No downstream elements
+          (= (inc Ci) (+ n-k i)))   ; All elements from i to k-1 maxed
+      (assoc combo i (inc Ci))
+      :else
+      (first (reduce (fn [[C, ^long i, ^long m] _]
+                       [(assoc C i m) (inc i) (inc m)])
+                     [combo i (inc Ci)] (range i k))))))
+(set! *unchecked-math* false)
 
-;;; "Had to" change combins to directly use index-combinations for two
-;;; return version case.
-;;;
-;;; Originally just (lazy-seq (map vec (comb/combinations coll k)))
+(defn index-combos
+  "Generate all index combinations - in lexical graphic order and 0
+  based - of N items taken K at a time. Uses persistent data
+  structures (vectors), and returns a lazy-seq of vectors."
+  [n k]
+  (let [next (fn next [combo]
+               (when (seq combo)
+                 (cons combo
+                       (lazy-seq (next (next-index-combo combo n k))))))]
+    (next (into [] (range k)))))
+
+(defn index-combosv
+  "Eagerly generate all index combinations in same fashsion as
+  index-combos (see for details).
+
+  WARNING: for large examples where you do not use them all (for
+  example, taking some subset) this could crash your program. See
+  index-combos for a LAZY version!"
+  [n k]
+  (let [combo (into [] (range k))]
+    (loop [combo combo
+           combos [combo]]
+      (let [combo (next-index-combo combo n k)]
+        (if combo
+          (recur combo (conj combos combo))
+          combos)))))
+
+
 (defn combins
   "Return the set of all K element _combinations_ (not permutations)
-   formed from coll.  Coll does not need to be a set.  In particular,
-   repeated elements are legal.
+  formed from coll.  Coll does not need to be a set.  In particular,
+  repeated elements are legal. Combinations are returned as a lazy seq
+  of vectors, each vector a combination.
+
+  In the three argument case, xfn is a transform function applied to
+  each combination which are passed as vectors - see examples for a
+  use case. The default is simply identity (used for the 2 argument
+  signature).
 
    Examples:
    (combins 2 \"abcdef\")
@@ -75,25 +104,15 @@
        [\\b \\d] [\\b \\e] [\\b \\f] [\\c \\d] [\\c \\e] [\\c \\f]
        [\\d \\e] [\\d \\f] [\\e \\f])
 
-   (map #(apply str %) (combins 2 \"AAGGGCGUGG\"))
+   (combins #(apply str %) 2 \"AAGGGCGUGG\")
    => (\"AA\" \"AG\" \"AG\" \"AC\" \"AG\" \"AU\" \"AG\" \"AG\" \"AC\"
        \"AG\" \"AU\" \"GG\" \"GC\" \"GG\" \"GU\" \"GC\" \"GG\" \"GU\"
-       \"CG\" \"CU\" \"GU\")
-  "
-  [k coll & [indices]]
-  (let [v (vec (reverse coll))]
-    (if (zero? k) (list [])
-        (let [cnt (count coll)]
-          (cond (> k cnt) nil
-                (= k cnt) (list (vec coll))
-                ;; Just the sets
-                (not indices)
-                (map #(vec (map v %)) (index-combinations k cnt))
-
-                :else ; Sets and their indices
-                [(map #(vec (map v %)) (index-combinations k cnt))
-                 (combins k (range cnt))]
-                )))))
+       \"CG\" \"CU\" \"GU\")"
+  ([k coll]
+   (combins identity k coll))
+  ([xfn k coll]
+   (let [v (vec coll)]
+     (map #(xfn (mapv v %)) (index-combos (count coll) k)))))
 
 (defn choose-k
   "Synonym for combins"
@@ -136,3 +155,50 @@
     (/ (f n k) (f k k))))
 
 
+(defn- perm-swap [perm i j]
+  (assoc perm i (perm j) j (perm i)))
+
+(set! *unchecked-math* :warn-on-boxed)
+(defn next-index-perm
+  "Generate next permutation from permutation PERM of size N. Uses
+  Heap's algorithm."
+  [^long n, ^long i, idx perm]
+  (loop [i i
+         idx idx]
+    (if (= i n)
+      nil
+      (let [IDXi (long (idx i))]
+        (if (< IDXi i)
+          (let [k (if (even? i) 0 IDXi) ; (* (mod i 2) IDXi)
+                perm (assoc perm k (perm i) i (perm k))] ; Swap
+            [1, (assoc idx i (inc IDXi)), perm])
+          (recur (inc i) (assoc idx i 0)))))))
+(set! *unchecked-math* false)
+
+(defn index-perms
+  "Lazily generate all permutation indices, without repitition, of
+  size N. Uses Heap's algorithm."
+  [n]
+  (let [next (fn next [[i idx perm]]
+               (when perm
+                     (cons perm
+                           (lazy-seq (next (next-index-perm n i idx perm))))))]
+    (next [1 (vec (repeat n 0)) (into [] (range n))])))
+
+
+(defn perms
+  "Permutation item generation without repetition over COLL. xfn is a
+  transform function applied to each item set generated, and defaults
+  to simply aggregating them in a vector.
+
+  Examples:
+  (perms \"ADN\")
+  => [[\\A \\A] [\\A \\D] [\\A \\N] [\\D \\A] [\\D \\D]
+      [\\D \\N] [\\N \\A] [\\N \\D] [\\N \\N]]
+  (perms str \"ADN\")
+  => [\"AA\" \"AD\" \"AN\" \"DA\" \"DD\" \"DN\" \"NA\" \"ND\" \"NN\"]"
+  ([coll]
+   (perms vec coll))
+  ([xfn coll]
+   (let [v (vec coll)]
+     (map #(xfn (mapv v %)) (index-perms (count coll))))))

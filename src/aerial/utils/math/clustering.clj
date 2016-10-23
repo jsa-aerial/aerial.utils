@@ -39,7 +39,7 @@
 
             [aerial.utils.coll
              :refer [vfold ensure-vec drop-until take-until-nochange
-                     in map-entry? reducem]]
+                     in reducem]]
 
             [aerial.utils.math
              :refer [vecdist sum sqr vecmean cumsum norm]]

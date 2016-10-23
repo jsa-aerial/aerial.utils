@@ -57,14 +57,55 @@
   [l r]
   (zero? (.compareToIgnoreCase l r)))
 
-
-(defn intstg?
+(defn digits?
   "Test and return whether S is a string of only digits 0-9.  If so,
   return generalized boolean else return nil/false"
   [s]
   (let [hit (re-find #"[0-9]+" s)]
     (and hit (= hit s))))
 
+
+(defn ^String substring?
+  "True if s contains the substring."
+  [^String substring ^String s]
+  (.contains s substring))
+
+(defn ^String get
+  "Gets the i'th character in string."
+  [^String s ^long i]
+  (.charAt s i))
+
+(defn ^String substring
+  "Return the substring defined as stg[start..end-1] where start and
+  end are zero based. If end < 0, ret stg[start..(+ (count stg)
+  end)]. In the two argument case, takes end = (count stg)
+
+   Ex:
+
+   (substring \"0123456789\" 1 5)  => \"1234\"
+   (substring \"0123456789\" 3)    => \"3456789\"
+   (substring \"0123456789\" 1 -2) => \"1234567\"
+  "
+  ([^String stg, ^long start]
+   (substring stg start (.length stg)))
+  ([^String stg, ^long start, ^long end]
+   (let [l (.length stg)
+         start (if (< start 0) 0 start)
+         end (if (< end 0) (+ l end) end)
+         end (if (> end l) l end)]
+     (.substring stg start end))))
+
+(defn ^String reverse
+  "Reverse string S. Return S' s.t. S'[i] = S[l-i]"
+  [^String s]
+  (let [^StringBuilder sb (StringBuilder.)
+        ^chars sa (.toCharArray s)
+        len (long (count s))]
+    (loop [i (dec len)]
+      (if (< i 0)
+        (.toString sb)
+        (do (.append sb (aget sa i))
+            (recur (dec i)))))))
 
 (defn ^String take
   "Take first n characters from s, up to the length of s."

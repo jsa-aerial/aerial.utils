@@ -77,9 +77,9 @@
 
 
 (defn freqn
-  "Frequencies of n-grams (aka l-mers \"features\", et. al.) in
-   collection COLL treated as a sequence.  n is the \"window\" or
-   resolution width.  Slide is always fixed at 1 (one) position.
+  "Frequencies of n-grams (aka kmers, \"features\", et. al.) in
+  collection COLL treated as a sequence.  n is the \"window\" or
+  resolution width.  Slide is always fixed at 1 (one) position.
 
    Ex: (freqn 2 \"acagtcaacctggagcctggt\")
    =>
@@ -322,18 +322,22 @@
    But without computing actual weighted sequence c*.
   "
   ([coll]
-     (if (empty? coll)
-       (raise :type :invalid-operation
-              :msg "Mean of empty set not defined"
-              :coll coll)
-       (double
-        (if (pair-coll? coll)
-          (mean-freq-map coll)
-          (let [coll (if (map? coll) (vals coll) coll)]
-            (/ (sum coll)
-               (count coll)))))))
-  ([x & xs]
-     (mean (cons x xs))))
+   (cond
+     (number? coll) (double coll)
+
+     (empty? coll)
+     (raise :type :invalid-operation
+            :msg "Mean of empty set not defined"
+            :coll coll)
+     :else
+     (double
+      (if (pair-coll? coll)
+        (mean-freq-map coll)
+        (let [coll (if (map? coll) (vals coll) coll)]
+          (/ (sum coll)
+             (count coll)))))))
+  ([x1 x2 & xs]
+   (mean (cons x1 (cons x2 xs)))))
 
 (defn median
   "Compute the median of the given collection COLL.  If coll is a

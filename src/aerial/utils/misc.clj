@@ -40,6 +40,7 @@
 
             [me.raynes.conch :as sh]
             [me.raynes.conch.low-level :as shl]
+            [clj-dns.core :as rdns] ; reverse dns
 
             [aerial.fs :as fs]
             [aerial.utils.string :as str]
@@ -47,6 +48,7 @@
 
   (:import [java.util Date Calendar Locale]
            [java.util Arrays]
+           [java.net NetworkInterface Inet4Address Inet6Address]
            java.lang.Thread
            [java.text SimpleDateFormat]
            java.lang.management.ManagementFactory))
@@ -154,6 +156,36 @@
   []
   (->> (. (ManagementFactory/getRuntimeMXBean) getName)
        (str/split #"@") first))
+
+
+(defn host-ipaddress
+  "Obtain the host IP addresses (:inet4 and :inet6) for the machine on
+   which we are running. Returns a map of interfaces filtered for
+   being up, non virtual, and not the loopback, and their associated
+   vector of inet6 and inet4 addresses. For example:
+
+   {:eth0 {:inet6 [\"fe80:0:0:0:225:90ff:fe21:66d2%2\"],
+           :inet4 [\"136.167.54.82\"]}}
+  "
+  []
+  (->> (NetworkInterface/getNetworkInterfaces)
+       enumeration-seq
+       (filter #(and (.isUp %) (not (.isVirtual %)) (not (.isLoopback %))))
+       (map #(vector (.getName %) %))
+       (mapv (fn[[n intf]]
+               [(keyword n)
+                (->> intf .getInetAddresses enumeration-seq
+                     (group-by #(cond (instance? Inet4Address %) :inet4
+                                      (instance? Inet6Address %) :inet6
+                                      :else :unknown))
+                     (reduce (fn[M [k ifv]]
+                               (assoc M k (mapv #(.getHostAddress %) ifv)))
+                             {})
+                     )]))
+       (into {})))
+
+(defn host-dns-name []
+  (-> (host-ipaddress) :eth0 :inet4 first rdns/hostname))
 
 
 ;;; ----------------------------------------------------------------
@@ -337,34 +369,6 @@
 ;;; ----------------------------------------------------------------
 ;;; Some helpers for running external programs.  In particular,
 ;;; running them while ensuring they actually terminate normally.
-
-
-(defn get-tool-path [toolset-type]
-  (case toolset-type
-        :ncbi
-        (or (getenv "NCBI_BLAST")
-            "/usr/local/ncbi/blast/bin/")
-        :cmfinder
-        (or (getenv "CMFINDER")
-            "/usr/local/CMFinder/bin/")
-        :infernal
-        (or (getenv "INFERNAL")
-            "/usr/local/Infernal/bin/")
-
-        :cdhit
-        (or (getenv "CDHIT")
-            "/usr/local/cd-hit/")
-
-        :bioperl "/usr/local/bin/"
-        :mysql   "/usr/local/mysql/bin/"))
-
-
-(defn assert-tools-exist [tool-vec]
-  (doseq [pgm (vec tool-vec)]
-    (when (not (fs/executable? pgm))
-      (let [[_ path p] (re-matches #"(^/.*/)(.*)" pgm)]
-        (raise :type :missing-program :path path :pgm p)))))
-
 
 (defn- sh-result [proc]
   (let [output (proc :out)
