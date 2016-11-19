@@ -38,9 +38,54 @@
    [aerial.fs :as fs]
    [aerial.utils.coll :refer [concatv take-until drop-until]]
    [aerial.utils.string :as str]
-   [aerial.utils.misc :refer [self-process-id runx]]
-   ))
+   [aerial.utils.misc :refer [self-process-id runx]])
 
+  (:import
+   [java.io InputStream OutputStream]
+   [java.nio ByteBuffer]
+   [java.util Arrays]))
+
+
+;;; ----------------------------------------------------------------
+;;; Low level streaming helpers
+
+(defn open-streaming-gzip
+  "Open a gziped file stream on file given by file specification
+  fspec (a string). The input/output mode is given by io: :in for
+  input (reading), :out for output (writing)"
+  [fspec io]
+  (if (= io :in)
+    (->> fspec clojure.java.io/input-stream
+         java.util.zip.GZIPInputStream.)
+    (->> fspec clojure.java.io/output-stream
+         java.util.zip.GZIPOutputStream.
+         clojure.java.io/writer)))
+
+(defn read-stream
+  "Read a the next (binary) chunk from input stream instrm into byte
+  buffer buf. NOTE: this _modifies_ buf!"
+  [^InputStream instrm, #^bytes buf]
+  (let [n (.read instrm buf)]
+    (if (neg? n)
+      nil
+      (Arrays/copyOfRange buf 0 n))))
+
+(defn write-stream
+  "Write a chunk of output data to output stream otstrm. data is
+  typically a byte buffer representing whatever data is being written."
+  [^OutputStream otstrm, data]
+  (.write otstrm data))
+
+(defn close-stream
+  "Close the i/o stream strm."
+  [strm]
+  (.close strm))
+
+
+
+
+;;; ----------------------------------------------------------------
+;;; letio form support
 
 (declare read-lines)
 
@@ -48,10 +93,12 @@
   (atom
    [#'clojure.java.io/reader
     #'clojure.java.io/writer
-    #'aerial.utils.io/read-lines]))
+    #'aerial.utils.io/read-lines
+    ;; NOT really sure what to do with open-streaming-gzip - if anything!
+    #_#'aerial.utils.io/open-streaming-gzip]))
 
 (def rdrwtrs-set
-  (atom #{"read-lines" "reader" "writer"}))
+  (atom #{"read-lines" #_"open-streaming-gzip" "reader" "writer"}))
 
 (def nss-set
   (atom #{(find-ns 'aerial.utils.io) (find-ns 'clojure.java.io)}))
@@ -84,13 +131,13 @@
   and rwbinds are all the reader and writer bindings. Either bvec or
   rwbinds may be empty."
   [bindings]
-  (let [{:keys [bvec rwbinds]}
+  (let [toplevel #{#_"open-streaming-gzip" "writer", "reader"}
+        {:keys [bvec rwbinds]}
         (->> bindings
              (partition-all 2)
              (group-by
               (fn[[b v]]
-                (if (and (list? v)
-                         (#{"writer", "reader"} (name (first v))))
+                (if (and (list? v) (toplevel (name (first v))))
                   :rwbinds
                   :bvec))))]
     [(apply concat bvec) (apply concat rwbinds)]))
@@ -228,6 +275,10 @@
                (. fd# close))))))))
 
 
+;;; ----------------------------------------------------------------
+;;; Abstracted readers and writers
+
+
 (defn write-lines
   "Writes lines (a collection of strings) to f, separated by newlines.
    f is opened with writer, and automatically closed at the end of the
@@ -280,37 +331,6 @@
        ~@body)))
 
 
-(defn fd-use
-  "Returns count of current file descriptors held.  Often (typically)
-   this can be larger (indeed, _much_ larger) than the count actually
-   being used.  This is due to the fact that things like io/read-lines
-   or equivalent will not close the file unless it is read in
-   entirety.  There are many cases where reading only the first few
-   lines is what is needed.  Further, reading them all just to get a
-   few is completely loses all advantage of lazy evaluation (not to
-   mention possible memory blow up)
-
-   *** NOTE: (bug!) UNIX only.  Uses /proc/<pid>/fd to determine all
-       descriptors currently held by the process (the JVM here).
-  " []
-  (let [pid (self-process-id)]
-    (->> pid (#(fs/join "/proc" % "fd"))
-         (runx "ls") (str/split #"\n") count)))
-
-(defn force-gc-finalize
-  "Tries to force a GC in order to finalize no longer used OS
-   resources - in particular file descriptors (see fd-use).
-
-   *** NOTE: as described by System.gc(), which we use here, this may
-       or may not actually accomplish the task at hand as it is only a
-       'suggestion' to the collector to run.  If it does run, all no
-       longer used resoureces should be finalized, i.e., closed and
-       returned.
-  "
-  []
-  (System/gc))
-
-
 
 ;;; ----------------------------------------------------------------
 ;;; Some simple text file processing utils.
@@ -341,3 +361,39 @@
          (when result#
            (println result#))))))
 
+
+
+
+;;; ----------------------------------------------------------------
+;;; Some GC level file descriptor functions
+
+
+(defn fd-use
+  "Returns count of current file descriptors held.  Often (typically)
+   this can be larger (indeed, _much_ larger) than the count actually
+   being used.  This is due to the fact that things like io/read-lines
+   or equivalent will not close the file unless it is read in
+   entirety.  There are many cases where reading only the first few
+   lines is what is needed.  Further, reading them all just to get a
+   few is completely loses all advantage of lazy evaluation (not to
+   mention possible memory blow up)
+
+   *** NOTE: (bug!) UNIX only.  Uses /proc/<pid>/fd to determine all
+       descriptors currently held by the process (the JVM here).
+  " []
+  (let [pid (self-process-id)]
+    (->> pid (#(fs/join "/proc" % "fd"))
+         (runx "ls") (str/split #"\n") count)))
+
+(defn force-gc-finalize
+  "Tries to force a GC in order to finalize no longer used OS
+   resources - in particular file descriptors (see fd-use).
+
+   *** NOTE: as described by System.gc(), which we use here, this may
+       or may not actually accomplish the task at hand as it is only a
+       'suggestion' to the collector to run.  If it does run, all no
+       longer used resoureces should be finalized, i.e., closed and
+       returned.
+  "
+  []
+  (System/gc))
