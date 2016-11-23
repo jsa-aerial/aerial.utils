@@ -56,7 +56,8 @@
   [fspec io]
   (if (= io :in)
     (->> fspec clojure.java.io/input-stream
-         java.util.zip.GZIPInputStream.)
+         java.util.zip.GZIPInputStream.
+         clojure.java.io/reader)
     (->> fspec clojure.java.io/output-stream
          java.util.zip.GZIPOutputStream.
          clojure.java.io/writer)))
@@ -131,7 +132,7 @@
   and rwbinds are all the reader and writer bindings. Either bvec or
   rwbinds may be empty."
   [bindings]
-  (let [toplevel #{#_"open-streaming-gzip" "writer", "reader"}
+  (let [toplevel #{"open-streaming-gzip" "writer", "reader"}
         {:keys [bvec rwbinds]}
         (->> bindings
              (partition-all 2)
