@@ -684,7 +684,7 @@
         len (long (min sz1 (long (count s2))))]
     (loop [i (long 0)
            cnt (long (Math/abs (- len sz1)))]
-      (if (= i sz1)
+      (if (= i len)
         cnt
         (if (= (austr/get s1 i) (austr/get s2 i))
           (recur (inc i) cnt)

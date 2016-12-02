@@ -122,6 +122,19 @@
     ""
     (.substring s n)))
 
+(defn ^String sliding-take
+  "Sliding window take for strings. N is the \"window\" size to slide
+  across STG. D is the slide displacement and defaults to 1."
+  ([n stg]
+   (sliding-take 1 n stg))
+  ([d n stg]
+   (let [next (fn next [s]
+                (when (not= "" s)
+                  (cons (take n s)
+                        (lazy-seq (next (drop d s))))))]
+     (next stg))))
+
+
 (defn ^String butlast
   "Returns s without the last n characters.  Returns an empty string
   if n is greater than the length of s."
