@@ -62,6 +62,17 @@
          java.util.zip.GZIPOutputStream.
          clojure.java.io/writer)))
 
+(defn open-file
+  "Open file filespec (string), accounting for whether it is
+  gzipped. Mode is either :in or :out. Returns a reader or writer.
+
+  NOTE: (bug) file extension of .gz => gzipped, else not"
+  [filespec mode]
+  (cond
+    (=  "gz" (fs/ftype filespec)) (open-streaming-gzip filespec mode)
+    (= mode :in) (cjio/reader filespec)
+    :else (cjio/writer filespec)))
+
 (defn read-stream
   "Read a the next (binary) chunk from input stream instrm into byte
   buffer buf. NOTE: this _modifies_ buf!"
@@ -132,7 +143,7 @@
   and rwbinds are all the reader and writer bindings. Either bvec or
   rwbinds may be empty."
   [bindings]
-  (let [toplevel #{"open-streaming-gzip" "writer", "reader"}
+  (let [toplevel #{"open-streaming-gzip" "open-file" "writer", "reader"}
         {:keys [bvec rwbinds]}
         (->> bindings
              (partition-all 2)
