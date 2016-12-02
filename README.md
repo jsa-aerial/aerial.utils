@@ -7,7 +7,7 @@ Various utility functionality covering common tasks; trees; clustering; graphs; 
 
 To install, add the following to your project `:dependencies`:
 
-    [aerial.utils "1.0.8"]
+    [aerial.utils "1.1.0"]
 
 ## Documentation
 
