@@ -1,4 +1,4 @@
-(defproject aerial.utils "1.2.0"
+(defproject aerial.utils "1.2.1"
   :description "Utility 'tool belt' of functions for common tasks; trees; clustering; probability, stats, and information theory; et.al."
   :url "https://github.com/jsa-aerial/aerial.utils"
   :license {:name "The MIT License (MIT)"
