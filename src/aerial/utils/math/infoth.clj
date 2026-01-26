@@ -52,6 +52,30 @@
 
 
 
+(defn random-bit-sequence
+  "Return vector of 1's/0's of length len as determined by prob1 - the
+  probability that the next element in sequence is a 1.
+
+  Examples:
+
+  (random-bit-sequence 10 0.7) => [0 1 0 1 1 1 1 1 0 0]
+
+  ;; Note, as len goes up, sequence converges to probability (law of
+  ;; large numbers)
+  (entropy {1 0.7 0 0.3}) => 0.8812908992306927
+  (entropy (random-bit-sequence 100 0.7)) => 0.8267463724926178
+  (entropy (random-bit-sequence 10000 0.7)) => 0.8817793067405739
+  (entropy (random-bit-sequence 1000000 0.7)) => 0.8815083762598199
+  "
+  [len prob1]
+  (loop [s []
+         i 0]
+    (if (= i len)
+      s
+      (recur (conj s (if (> prob1 (rand)) 1 0))
+             (inc i)))))
+
+
 (defn shannon-entropy
   "Returns the Shannon entropy of a sequence: -sum(* pi (log pi)),
    where i ranges over the unique elements of S and pi is the

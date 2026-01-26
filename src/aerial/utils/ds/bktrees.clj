@@ -158,11 +158,13 @@
    (tree-transact
     (zip/root (node "abc" 0))
     map-zip
-    #(insert % levenshtein "def" )
-    #(insert % levenshtein "happy")
-    #(insert % levenshtein "def"))
-   node-count)
+    #(insert % aerial.utils.math.infoth/levenshtein "def" )
+    #(insert % aerial.utils.math.infoth/levenshtein "happy")
+    #(insert % aerial.utils.math.infoth/levenshtein "def"))
+   #_node-count
    (tree-transact
     map-zip
-    #(insert % levenshtein "one" "two" "three" "four"))
-   node-count)
+    #(insert % aerial.utils.math.infoth/levenshtein "one" "two" "three" "four"))
+
+   #_node-count)
+)
