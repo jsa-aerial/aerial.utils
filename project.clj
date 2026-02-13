@@ -1,11 +1,11 @@
-(defproject aerial.utils "1.2.1"
+(defproject aerial.utils "1.2.2"
   :description "Utility 'tool belt' of functions for common tasks; trees; clustering; probability, stats, and information theory; et.al."
   :url "https://github.com/jsa-aerial/aerial.utils"
   :license {:name "The MIT License (MIT)"
             :url  "http://opensource.org/licenses/MIT"
             :distribution :repo}
   :dependencies
-  [[org.clojure/clojure "1.11.3"]
+  [[org.clojure/clojure "1.12.3"]
    [org.clojure/math.numeric-tower "0.1.1"]
    [org.clojure/math.combinatorics "0.3.2"]
    [aysylu/loom "0.5.4"] ; graphs and graph algos

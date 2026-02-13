@@ -32,7 +32,7 @@
    dstandard Clojure ecosystem.  Mostly for seqs, but also for
    vectors, maps and sets."
 
-  (:refer-clojure :exclude [map-entry?])
+  (:refer-clojure :exclude [splitv-at partitionv-all map-entry?])
 
   (:require
    [clojure.core.reducers :as r]
